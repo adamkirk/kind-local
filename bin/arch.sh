@@ -1,0 +1,10 @@
+#!/bin/bash
+
+case $(uname -m) in 
+    x86_64) echo -n amd64
+        ;;
+    aarch64) echo -n arm64
+        ;;
+    *) echo -n $(uname -m)
+        ;; 
+esac

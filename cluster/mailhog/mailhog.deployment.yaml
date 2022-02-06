@@ -1,0 +1,31 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailhog
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      svc.name: mailhog
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        svc.name: mailhog
+    spec:
+      containers:
+      - image: mailhog/mailhog:latest
+        imagePullPolicy: IfNotPresent
+        name: mailhog
+        ports:
+        - name: smtp
+          containerPort: 1025
+          protocol: TCP
+        - name: web
+          containerPort: 8025
+          protocol: TCP
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      restartPolicy: Always
