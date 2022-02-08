@@ -1,0 +1,10 @@
+# Source originally pulled from grafana operator repo
+# See: https://github.com/grafana-operator/grafana-operator/tree/master/deploy/manifests
+namespace: telemetry
+namePrefix: grafana-operator-
+
+patchesStrategicMerge:
+- security_context.yaml
+
+resources:
+  - v4.1.1

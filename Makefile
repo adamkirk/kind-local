@@ -66,11 +66,6 @@ install-hosts: ## Installs the hosts cli utility in ./bin
 	chmod +x ./bin/hosts
 	rm ./bin/hosts.tar.gz
 
-.PHONY: install-operator-sdk
-install-operator-sdk:
-	curl -L -o ./bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v1.17.0/operator-sdk_$(OS)_$(ARCH)
-	chmod +x ./bin/operator-sdk
-
 .PHONY: prepare-local
 prepare-local: install-hosts install-operator-sdk build-local-images gen-certs
 
@@ -80,15 +75,11 @@ context: ## Switches to the kind cluster context (useful to ensure we don't run 
 	@kubectl config use-context kind-$(KIND_CLUSTER_NAME)
 
 .PHONY: cluster
-cluster: kind-cluster olm ingress mailhog dashboard dns ## Spins up the base kubernetes platform, ready for application deployments
+cluster: kind-cluster ingress mailhog dashboard dns ## Spins up the base kubernetes platform, ready for application deployments
 
 .PHONY: destroy
 destroy: ## Completely destroys the k8s cluster and everything in it
 	kind delete cluster --name $(KIND_CLUSTER_NAME)
-
-.PHONY: olm
-olm: context
-	./bin/operator-sdk olm install
 
 .PHONY: dashboard
 dashboard: context ## Deploys the kubernetes dashboard
@@ -148,6 +139,30 @@ prometheus: context
 compile-kube-prometheus:
 	$(DOCKER_RUN_JSONNET_CI) jb install
 	$(DOCKER_RUN_JSONNET_CI) /srv/build.sh
+
+.PHONY: grafana-operator
+grafana-operator: context
+	kubectl apply -k ./cluster/telemetry/grafana-operator
+	kubectl wait --for=condition=available --timeout=300s -n telemetry deployment/grafana-operator-controller-manager
+
+.PHONY: load-grafana-image
+load-grafana-image:
+	docker build -t custom/grafana:local ./cluster/telemetry/grafana/docker
+	kind load docker-image custom/grafana:local --name $(KIND_CLUSTER_NAME)
+	
+
+.PHONY: grafana
+grafana: load-grafana-image
+	kubectl apply -f ./cluster/telemetry/grafana/grafana.yaml
+	until kubectl get deployment -n telemetry grafana-deployment &> /dev/null ; do sleep 1; done
+	kubectl wait -n telemetry --for=condition=Available deployment/grafana-deployment
+	until kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}' &> /dev/null ; do sleep 1; done
+	bash -c "kubectl wait -n telemetry --for=condition=Ready pod/$$(kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}')"
+	bash -c "kubectl exec -it \
+	-n telemetry \
+	$$(kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}') \
+	-c grafana \
+	-- bash -c '/usr/share/grafana/bin/create-org.sh localdev'"
 
 .PHONY: telemetry
 telemetry: compile-kube-prometheus telemetry-ns prometheus
