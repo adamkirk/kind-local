@@ -13,10 +13,25 @@ local kp =
         namespace: 'telemetry',
       },
     },
-    /*
-    Add an ingress resource to expose the prometheus server on a domain.
-    */
+
+
+
+
     prometheus+:: {
+      /*
+      Add the ability for the service monitor to monitor all namespaces
+      See: https://github.com/prometheus-operator/kube-prometheus/issues/350#issuecomment-571230143
+      */
+      clusterRole+: {
+        rules+: [{
+          apiGroups: [''],
+          resources: ['services', 'endpoints', 'pods'],
+          verbs: ['get', 'list', 'watch'],
+        }],
+      },
+      /*
+      Add an ingress resource to expose the prometheus server on a domain.
+      */
       ingress: {
         apiVersion: 'networking.k8s.io/v1',
         kind: 'Ingress',

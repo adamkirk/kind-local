@@ -1,0 +1,15 @@
+apiVersion: integreatly.org/v1alpha1
+kind: GrafanaDashboard
+metadata:
+  name: cluster
+  namespace: telemetry
+  labels:
+    app: grafana
+spec:
+  grafanaCom:
+    id: 6417
+  datasources:
+    - inputName: "DS_PROMETHEUS"
+      datasourceName: "Prometheus"
+  customFolderName: global
+  

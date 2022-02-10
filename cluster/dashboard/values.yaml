@@ -268,7 +268,7 @@ metricsScraper:
 ##  - https://github.com/kubernetes-sigs/metrics-server
 ##  - https://github.com/kubernetes-sigs/metrics-server/tree/master/charts/metrics-server
 metrics-server:
-  enabled: true
+  enabled: false
   ## Example for additional args
   args:
     - --kubelet-preferred-address-types=InternalIP

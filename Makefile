@@ -75,7 +75,7 @@ context: ## Switches to the kind cluster context (useful to ensure we don't run 
 	@kubectl config use-context kind-$(KIND_CLUSTER_NAME)
 
 .PHONY: cluster
-cluster: kind-cluster ingress mailhog dashboard dns ## Spins up the base kubernetes platform, ready for application deployments
+cluster: kind-cluster telemetry ingress mailhog dashboard dns ## Spins up the base kubernetes platform, ready for application deployments
 
 .PHONY: destroy
 destroy: ## Completely destroys the k8s cluster and everything in it
@@ -104,7 +104,8 @@ kind-cluster:
 
 .PHONY: ingress
 ingress: context ## Enable the default minikube ingress addon
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	curl -o ./cluster/ingress-nginx/manifests/ingress-nginx.yaml -L https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	kubectl apply -k ./cluster/ingress-nginx/
 	until kubectl get deployment -n ingress-nginx ingress-nginx-controller &> /dev/null ; do sleep 1; done
 	# Wait for the rollout to complete otherwise other stages will fail when adding ingress resources
 	kubectl rollout status -n ingress-nginx -w deployment/ingress-nginx-controller
@@ -149,20 +150,28 @@ grafana-operator: context
 load-grafana-image:
 	docker build -t custom/grafana:local ./cluster/telemetry/grafana/docker
 	kind load docker-image custom/grafana:local --name $(KIND_CLUSTER_NAME)
-	
 
 .PHONY: grafana
-grafana: load-grafana-image
+grafana: context load-grafana-image
 	kubectl apply -f ./cluster/telemetry/grafana/grafana.yaml
 	until kubectl get deployment -n telemetry grafana-deployment &> /dev/null ; do sleep 1; done
 	kubectl wait -n telemetry --for=condition=Available deployment/grafana-deployment
-	until kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}' &> /dev/null ; do sleep 1; done
-	bash -c "kubectl wait -n telemetry --for=condition=Ready pod/$$(kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}')"
-	bash -c "kubectl exec -it \
-	-n telemetry \
-	$$(kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}') \
-	-c grafana \
-	-- bash -c '/usr/share/grafana/bin/create-org.sh localdev'"
+	# until kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}' &> /dev/null ; do sleep 1; done
+	# bash -c "kubectl wait -n telemetry --for=condition=Ready pod/$$(kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}')"
+	# bash -c "kubectl exec -it \
+	# -n telemetry \
+	# $$(kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}') \
+	# -c grafana \
+	# -- bash -c '/usr/share/grafana/bin/create-org.sh localdev'"
+
+.PHONY: grafana-datasources
+grafana-datasources: context
+	kubectl apply -f ./cluster/telemetry/grafana/datasources/prometheus.yaml
+
+.PHONY: grafana-dashboards
+grafana-dashboards: context
+	kubectl apply -f ./cluster/telemetry/grafana/dashboards/cluster.yaml
+	# kubectl apply -f ./cluster/telemetry/grafana/dashboards/nginx-ingress.yaml
 
 .PHONY: telemetry
-telemetry: compile-kube-prometheus telemetry-ns prometheus
+telemetry: compile-kube-prometheus telemetry-ns prometheus grafana-operator grafana grafana-datasources grafana-dashboards

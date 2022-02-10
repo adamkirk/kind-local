@@ -50,15 +50,7 @@ spec:
       - args:
         - --health-probe-bind-address=:8081
         - --metrics-bind-address=127.0.0.1:8080
-        - --zap-log-level=error
-        # @UPGRADE 
-        # These two args should ideally be in a patch
-        # Apparrently it's not easy to add an element to a list with kustomize
-        # At least, I got bored trying to figure out from the _amazing_ docs how to do this
-        # This custom image allows us to create an org with a script in the image
-        # So that we can use anonymous auth properly
-        - --grafana-image=custom/grafana
-        - --grafana-image-tag=local
+        - --zap-log-level=info
         command:
         - /manager
         env:

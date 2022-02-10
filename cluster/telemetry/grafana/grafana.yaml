@@ -16,7 +16,7 @@ spec:
   config:
     log:
       mode: "console"
-      level: "error"
+      level: "info"
     log.frontend:
       enabled: true
     auth:
@@ -24,8 +24,12 @@ spec:
       disable_signout_menu: True
     auth.anonymous:
       enabled: True
-      org_name: "localdev"
+      org_name: "Main Org."
       org_role: "Admin"
+  dataStorage:
+    accessModes:
+    - ReadWriteOnce
+    size: 10Gi
   deployment:
     labels: 
       custom.wait: grafanalocal
