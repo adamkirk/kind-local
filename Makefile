@@ -129,40 +129,28 @@ telemetry-ns: context
 	kubectl apply -f ./cluster/telemetry/rendered/prometheus-tls.secret.yaml
 	kubectl apply -f ./cluster/telemetry/rendered/grafana-tls.secret.yaml
 
-.PHONY: prometheus
-prometheus: context
-	kubectl apply --server-side -f ./cluster/telemetry/kube-prometheus/manifests/setup
-	kubectl wait --for=condition=available --timeout=300s -f ./cluster/telemetry/kube-prometheus/manifests/setup/prometheus-operator-deployment.yaml
-	kubectl apply -f ./cluster/telemetry/kube-prometheus/manifests/
+.PHONY: add-bitnami-helm-charts
+add-bitnami-helm-charts:
+	helm repo add bitnami https://charts.bitnami.com/bitnami
 
-.PHONY: compile-kube-prometheus
-compile-kube-prometheus:
-	$(DOCKER_RUN_JSONNET_CI) jb install
-	$(DOCKER_RUN_JSONNET_CI) /srv/build.sh
 
-.PHONY: grafana-operator
-grafana-operator: context
-	kubectl apply -k ./cluster/telemetry/grafana-operator
-	kubectl wait --for=condition=available --timeout=300s -n telemetry deployment/grafana-operator-controller-manager
-
-.PHONY: load-grafana-image
-load-grafana-image:
-	docker build -t custom/grafana:local ./cluster/telemetry/grafana/docker
-	kind load docker-image custom/grafana:local --name $(KIND_CLUSTER_NAME)
-	
+.PHONY: prometheus-operator
+prometheus: context add-bitnami-helm-charts
+	helm upgrade -n telemetry -i -f ./cluster/telemetry/prometheus/operator/values.yaml --wait --wait-for-jobs prometheus-operator bitnami/kube-prometheus
 
 .PHONY: grafana
-grafana: load-grafana-image
-	kubectl apply -f ./cluster/telemetry/grafana/grafana.yaml
-	until kubectl get deployment -n telemetry grafana-deployment &> /dev/null ; do sleep 1; done
-	kubectl wait -n telemetry --for=condition=Available deployment/grafana-deployment
-	until kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}' &> /dev/null ; do sleep 1; done
-	bash -c "kubectl wait -n telemetry --for=condition=Ready pod/$$(kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}')"
-	bash -c "kubectl exec -it \
-	-n telemetry \
-	$$(kubectl get pod -n telemetry -l app=grafana -o=jsonpath='{.items[0].metadata.name}') \
-	-c grafana \
-	-- bash -c '/usr/share/grafana/bin/create-org.sh localdev'"
+grafana: context add-bitnami-helm-charts
+	helm upgrade -n telemetry -i -f ./cluster/telemetry/grafana/operator/values.yaml --wait --wait-for-jobs grafana-operator bitnami/grafana-operator
+
+.PHONY: grafana-datasources
+grafana-datasources: context
+	kubectl apply -f ./cluster/telemetry/grafana/datasources/prometheus.yaml
+
+.PHONY: grafana-dashboards
+grafana-dashboards: context
+	kubectl apply -f ./cluster/telemetry/grafana/dashboards/cluster.yaml
+	kubectl apply -f ./cluster/telemetry/grafana/dashboards/nginx-ingress.yaml
 
 .PHONY: telemetry
-telemetry: compile-kube-prometheus telemetry-ns prometheus
+telemetry: telemetry-ns prometheus grafana
+
