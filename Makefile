@@ -75,7 +75,7 @@ context: ## Switches to the kind cluster context (useful to ensure we don't run 
 	@kubectl config use-context kind-$(KIND_CLUSTER_NAME)
 
 .PHONY: cluster
-cluster: kind-cluster ingress mailhog dashboard dns ## Spins up the base kubernetes platform, ready for application deployments
+cluster: kind-cluster telemetry ingress mailhog dashboard dns ## Spins up the base kubernetes platform, ready for application deployments
 
 .PHONY: destroy
 destroy: ## Completely destroys the k8s cluster and everything in it
@@ -104,7 +104,8 @@ kind-cluster:
 
 .PHONY: ingress
 ingress: context ## Enable the default minikube ingress addon
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	curl -o ./cluster/ingress-nginx/manifests/ingress-nginx.yaml -L https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	kubectl apply -k ./cluster/ingress-nginx/
 	until kubectl get deployment -n ingress-nginx ingress-nginx-controller &> /dev/null ; do sleep 1; done
 	# Wait for the rollout to complete otherwise other stages will fail when adding ingress resources
 	kubectl rollout status -n ingress-nginx -w deployment/ingress-nginx-controller
@@ -133,7 +134,6 @@ telemetry-ns: context
 add-bitnami-helm-charts:
 	helm repo add bitnami https://charts.bitnami.com/bitnami
 
-
 .PHONY: prometheus-operator
 prometheus: context add-bitnami-helm-charts
 	helm upgrade -n telemetry -i -f ./cluster/telemetry/prometheus/operator/values.yaml --wait --wait-for-jobs prometheus-operator bitnami/kube-prometheus
@@ -142,15 +142,15 @@ prometheus: context add-bitnami-helm-charts
 grafana: context add-bitnami-helm-charts
 	helm upgrade -n telemetry -i -f ./cluster/telemetry/grafana/operator/values.yaml --wait --wait-for-jobs grafana-operator bitnami/grafana-operator
 
-.PHONY: grafana-datasources
-grafana-datasources: context
+.PHONY: grafana-resources
+grafana-resources: context
 	kubectl apply -f ./cluster/telemetry/grafana/datasources/prometheus.yaml
-
-.PHONY: grafana-dashboards
-grafana-dashboards: context
+	# For some reason the grafana operator struggles without some time between 
+	# Gets itself into a broken state so the dashboards can never be created
+	sleep 5
 	kubectl apply -f ./cluster/telemetry/grafana/dashboards/cluster.yaml
 	kubectl apply -f ./cluster/telemetry/grafana/dashboards/nginx-ingress.yaml
 
 .PHONY: telemetry
-telemetry: telemetry-ns prometheus grafana
+telemetry: telemetry-ns prometheus grafana grafana-resources
 

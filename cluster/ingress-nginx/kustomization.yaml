@@ -1,0 +1,24 @@
+namespace: ingress-nginx
+
+patches:
+- patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/ports/-
+      value:
+        name: prometheus
+        containerPort: 10254
+    - op: add
+      path: /spec/template/metadata/annotations
+      value:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "10254"
+        prometheus.io/scheme: http
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --enable-metrics
+  target:
+    kind: Deployment
+    name: ingress-nginx-controller
+
+resources:
+  - manifests/ingress-nginx.yaml
